@@ -74,6 +74,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, headers, data });
     }
 
+    if (action === "getTemplate") {
+      try {
+        const response = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: "whatsappTemplate!A1",
+        });
+        const template = response.data.values?.[0]?.[0] || "";
+        return NextResponse.json({ success: true, template });
+      } catch (e: any) {
+        // If sheet doesn't exist, return empty or default
+        return NextResponse.json({ success: true, template: "" });
+      }
+    }
+
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error: any) {
     console.error("Sheets API GET error:", error);
@@ -208,6 +222,32 @@ export async function POST(request: Request) {
         requestBody: { values: [[status]] },
       });
 
+      return NextResponse.json({ success: true });
+    }
+
+    // ── Save WhatsApp Template ───────────────────────────────────────────────
+    if (action === "saveTemplate" && body.template !== undefined) {
+      const templateSheetName = "whatsappTemplate";
+      
+      // Check if sheet exists, if not create it
+      const spreadsheetInfo = await sheets.spreadsheets.get({ spreadsheetId });
+      const sheet = spreadsheetInfo.data.sheets?.find(s => s.properties?.title === templateSheetName);
+      
+      if (!sheet) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: {
+            requests: [{ addSheet: { properties: { title: templateSheetName } } }],
+          },
+        });
+      }
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${templateSheetName}!A1`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [[body.template]] },
+      });
       return NextResponse.json({ success: true });
     }
 

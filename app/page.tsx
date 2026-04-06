@@ -28,6 +28,7 @@ export default function Home() {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [loading, setLoading]           = useState(false);
   const [refreshing, setRefreshing]     = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
   const [showTemplate, setShowTemplate] = useState(false);
 
   // ── Looker-Studio style filters ────────────────────────────────────────────
@@ -60,7 +61,10 @@ export default function Home() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  useEffect(() => { fetchTabs(); }, []);
+  useEffect(() => { 
+    fetchTabs(); 
+    fetchTemplate();
+  }, []);
   useEffect(() => {
     if (modal === "addTab") setTimeout(() => modalInputRef.current?.focus(), 100);
   }, [modal]);
@@ -101,6 +105,37 @@ export default function Home() {
       if (data.success) { setExistingRows(data.data); setSelectedRows(new Set()); }
     } catch { showToast("Error loading records", "danger"); }
     setLoading(false);
+  };
+
+  const fetchTemplate = async () => {
+    try {
+      const res = await fetch("/api/sheets?action=getTemplate");
+      const data = await res.json();
+      if (data.success && data.template) {
+        setWhatsappTemplate(data.template);
+      }
+    } catch { /* ignore silently on load */ }
+  };
+
+  const saveTemplate = async () => {
+    setTemplateSaving(true);
+    try {
+      const res = await fetch("/api/sheets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "saveTemplate", template: whatsappTemplate }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("✅ Template saved successfully!", "success");
+      } else {
+        showToast(`Failed to save template: ${data.error}`, "danger");
+      }
+    } catch (err: any) {
+      showToast(`Error saving template: ${err.message}`, "danger");
+    } finally {
+      setTemplateSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -919,6 +954,19 @@ export default function Home() {
                         <i className="fa-solid fa-link" /> File Link
                       </button>
                     </div>
+                    
+                    <button 
+                      className={`${s.btn} ${s.btnPrimary} ${s.btnSm}`} 
+                      style={{ marginTop: "1rem", width: "100%", justifyContent: "center" }}
+                      onClick={saveTemplate}
+                      disabled={templateSaving}
+                    >
+                      {templateSaving ? (
+                        <><i className="fa-solid fa-spinner fa-spin" /> Saving…</>
+                      ) : (
+                        <><i className="fa-solid fa-floppy-disk" /> Save Template Permanently</>
+                      )}
+                    </button>
                   </div>
                 )}
               </div>
