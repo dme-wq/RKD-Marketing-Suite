@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
       for (const s of sheetsList) {
         const title = s.properties?.title;
-        if (!title) continue;
+        if (!title || title === "whatsappTemplate") continue;
         const response = await sheets.spreadsheets.values.get({
           spreadsheetId,
           range: `${title}!1:1`,
