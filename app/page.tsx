@@ -721,7 +721,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className={s.topBarCenter}>
+          <div className={s.topBarCenter} style={{ display: "flex" }}>
             <img src="https://i.ibb.co/N6Rqrqn1/Background-Image.png" alt="RKD Logo" />
             <span>RKD Marketing</span>
             <span>Marketing Suite</span>
@@ -738,7 +738,7 @@ export default function Home() {
             </div>
 
             {/* Import Contacts — small icon button always in topbar */}
-            <div style={{ position: "relative" }} title="Import Contacts (VCF/CSV/XLSX)">
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }} title="Import Contacts (VCF/CSV/XLSX)">
               <button
                 className={`${s.topBarBtn} ${s.topBarBtnGhost}`}
                 style={{
@@ -746,16 +746,14 @@ export default function Home() {
                   border: "1.5px solid #6366f1",
                   color: "#6366f1",
                   padding: "0.5rem 0.75rem",
-                  minWidth: 0,
+                  minWidth: "40px",
+                  justifyContent: "center"
                 }}
                 onClick={() => importFileRef.current?.click()}
                 disabled={importLoading}
-                title="Import Contacts from VCF / CSV / XLSX"
               >
-                {importLoading
-                  ? <><i className="fa-solid fa-spinner fa-spin" /> Parsing…</>
-                  : <><i className="fa-solid fa-file-import" /> Import</>
-                }
+                {importLoading ? <i className="fa-solid fa-spinner fa-spin" /> : <i className="fa-solid fa-file-import" />}
+                <span className={s.btnTextHideMobile} style={{ marginLeft: "4px" }}>Import</span>
               </button>
               <input
                 ref={importFileRef}
