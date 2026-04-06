@@ -721,7 +721,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className={s.topBarCenter} style={{ display: "flex" }}>
+          <div className={s.topBarCenter}>
             <img src="https://i.ibb.co/N6Rqrqn1/Background-Image.png" alt="RKD Logo" />
             <span>RKD Marketing</span>
             <span>Marketing Suite</span>
