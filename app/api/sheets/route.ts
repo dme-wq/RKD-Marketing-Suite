@@ -118,7 +118,7 @@ export async function POST(request: Request) {
     // ── Create new tab (RKD Standard Headers) ────────────────────────
     if (action === "createTab" && tabName) {
       // Standard headers for RKD Marketing Suite
-      const rkdHeaders = ["Timestamp", "First Name", "Mobile Number", "Company Name", "Alias", "WhatsApp Message", "Status", "Upload File Link"];
+      const rkdHeaders = ["Timestamp", "First Name", "Mobile Number", "Company Name", "Alias", "Links", "Status", "Upload File Link"];
 
       // 1. Create the new sheet
       await sheets.spreadsheets.batchUpdate({
