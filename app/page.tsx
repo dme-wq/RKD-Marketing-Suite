@@ -1367,7 +1367,7 @@ export default function Home() {
                   />
                   <p style={{ fontSize: "0.8rem", color: "var(--text-3)", marginTop: "0.625rem" }}>
                     <i className="fa-solid fa-circle-info" style={{ marginRight: "0.4rem" }} />
-                    Columns will be copied from the <strong>bathmat</strong> reference tab.
+                    Columns will be auto-generated with RKD standard headers (Name, Mobile, Company, Upload File Link, etc.).
                   </p>
                 </div>
               ) : (

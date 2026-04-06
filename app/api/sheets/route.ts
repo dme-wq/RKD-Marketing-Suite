@@ -115,16 +115,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true });
     }
 
-    // ── Create new tab (copies headers from 'bathmat') ────────────────────────
+    // ── Create new tab (RKD Standard Headers) ────────────────────────
     if (action === "createTab" && tabName) {
-      // 1. Get reference headers from 'bathmat'
-      const refResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `bathmat!1:1`,
-      });
-      const refHeaders = refResponse.data.values?.[0] || [];
+      // Standard headers for RKD Marketing Suite
+      const rkdHeaders = ["Timestamp", "First Name", "Mobile Number", "Company Name", "Alias", "WhatsApp Message", "Status", "Upload File Link"];
 
-      // 2. Create the new sheet
+      // 1. Create the new sheet
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         requestBody: {
@@ -132,15 +128,15 @@ export async function POST(request: Request) {
         },
       });
 
-      // 3. Write headers to the new sheet
+      // 2. Write headers to the new sheet
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${tabName}!1:1`,
         valueInputOption: "USER_ENTERED",
-        requestBody: { values: [refHeaders] },
+        requestBody: { values: [rkdHeaders] },
       });
 
-      return NextResponse.json({ success: true, columns: refHeaders });
+      return NextResponse.json({ success: true, columns: rkdHeaders });
     }
 
     // ── Update specific cell for a row ───────────────────────────────────────
