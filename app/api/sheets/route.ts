@@ -2,12 +2,19 @@ import { google } from "googleapis";
 import { NextResponse } from "next/server";
 
 const getAuth = () => {
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const rawKey = process.env.GOOGLE_PRIVATE_KEY;
+
+  if (!email || !rawKey) {
+    throw new Error(`Missing Auth Credentials: Email(${!!email}), Key(${!!rawKey})`);
+  }
+
+  const private_key = rawKey.replace(/\\n/g, "\n").replace(/^"(.*)"$/, '$1').trim();
+
   return new google.auth.GoogleAuth({
     credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY
-        ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n").replace(/^"(.*)"$/, '$1').trim()
-        : undefined,
+      client_email: email,
+      private_key: private_key,
     },
     scopes: [
       "https://www.googleapis.com/auth/spreadsheets",
@@ -19,7 +26,10 @@ const getAuth = () => {
 const spreadsheetId = process.env.GOOGLE_SHEET_ID;
 
 export async function GET(request: Request) {
-  if (!spreadsheetId) return NextResponse.json({ error: "Missing GOOGLE_SHEET_ID" }, { status: 500 });
+  if (!spreadsheetId) {
+    console.error("CRITICAL: GOOGLE_SHEET_ID is missing from Env Variables");
+    return NextResponse.json({ error: "Missing GOOGLE_SHEET_ID" }, { status: 500 });
+  }
   const { searchParams } = new URL(request.url);
   const action  = searchParams.get("action");
   const tabName = searchParams.get("tabName");
