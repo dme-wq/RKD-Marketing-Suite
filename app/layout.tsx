@@ -16,7 +16,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossOrigin="anonymous" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LQ==" crossOrigin="anonymous" referrerPolicy="no-referrer" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <a href="https://wa.me/919999999999" className="whatsapp-float" target="_blank" rel="noopener noreferrer" title="Chat on WhatsApp">
+          <i className="fa-brands fa-whatsapp"></i>
+        </a>
+      </body>
     </html>
   );
 }
