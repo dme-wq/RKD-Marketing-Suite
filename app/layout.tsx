@@ -18,9 +18,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         {children}
-        <a href="https://wa.me/919999999999" className="whatsapp-float" target="_blank" rel="noopener noreferrer" title="Chat on WhatsApp">
-          <i className="fa-brands fa-whatsapp"></i>
-        </a>
       </body>
     </html>
   );

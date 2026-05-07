@@ -1465,24 +1465,54 @@ export default function Home() {
                                 const isGeneralLink = /links/i.test(c) || /url/i.test(c);
 
                                 if (isUploadLink && val) {
-                                  const rawParts = val.split(",").map(l => l.trim()).filter(Boolean);
+                                  const rawParts = val ? val.split(",").map(l => l.trim()).filter(Boolean) : [];
                                   return (
                                     <td key={c} style={{ opacity: 1 }}>
-                                      <div style={{ display: "flex", gap: "0.25rem", justifyContent: "center" }}>
-                                        {rawParts.map((raw, i) => {
+                                      <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "0.4rem", justifyContent: "center", maxWidth: "160px" }}>
+                                        {rawParts.length > 0 ? rawParts.map((raw, i) => {
                                           let fileName = "Attachment";
                                           let fileUrl  = raw;
-                                          if (raw.includes("::")) {
-                                            const parts = raw.split("::");
-                                            fileName = parts[0];
-                                            fileUrl  = parts[1];
-                                          }
+                                          if (raw.includes("::")) { [fileName, fileUrl] = raw.split("::"); }
+                                          
+                                          const driveMatch = fileUrl.match(/[-\w]{25,}/);
+                                          const driveId = driveMatch ? driveMatch[0] : null;
+                                          
+                                          const extMatch = fileName.match(/\.([a-z0-9]+)$/i);
+                                          const ext = extMatch ? extMatch[1].toLowerCase() : "";
+                                          const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);
+                                          const isPdf = ext === "pdf";
+                                          const isPpt = ["ppt", "pptx"].includes(ext);
+                                          const isExcel = ["xls", "xlsx", "csv"].includes(ext);
+                                          const isWord = ["doc", "docx"].includes(ext);
+
+                                          const renderIcon = () => {
+                                            if (isPdf) return <i className="fa-solid fa-file-pdf" style={{ fontSize: '1.2rem', color: '#ef4444' }} />;
+                                            if (isPpt) return <i className="fa-solid fa-file-powerpoint" style={{ fontSize: '1.2rem', color: '#f97316' }} />;
+                                            if (isExcel) return <i className="fa-solid fa-file-excel" style={{ fontSize: '1.2rem', color: '#22c55e' }} />;
+                                            if (isWord) return <i className="fa-solid fa-file-word" style={{ fontSize: '1.2rem', color: '#3b82f6' }} />;
+                                            return <i className="fa-solid fa-file" style={{ fontSize: '1.2rem', color: 'var(--primary)' }} />;
+                                          };
+
                                           return (
-                                            <a key={i} href={fileUrl} target="_blank" rel="noreferrer" title={fileName} className={s.iconBtn}>
-                                              <i className="fa-solid fa-paperclip" style={{ color: "var(--primary)" }} />
+                                            <a key={i} href={fileUrl} target="_blank" rel="noreferrer" title={fileName} style={{ display: 'block', textDecoration: 'none' }}>
+                                              {isImage && driveId ? (
+                                                <div className={s.blinkPulse}>
+                                                  <img src={`https://drive.google.com/thumbnail?id=${driveId}&sz=w100`} alt={fileName} style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border-light)' }} onError={(e) => { e.currentTarget.style.display = 'none'; if (e.currentTarget.nextElementSibling) (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex'; }} />
+                                                  <div style={{ display: 'none', width: '40px', height: '40px', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-light)' }}>
+                                                    <i className="fa-solid fa-image" style={{ fontSize: '1rem', color: 'var(--primary)' }} />
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className={s.blinkPulse} style={{ width: '40px', height: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-light)', gap: '0.1rem' }}>
+                                                  {renderIcon()}
+                                                  <span style={{ fontSize: '0.45rem', color: 'var(--text-3)', maxWidth: '35px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '0.1rem', fontWeight: 600 }}>{ext ? ext.toUpperCase() : "FILE"}</span>
+                                                </div>
+                                              )}
                                             </a>
                                           );
-                                        })}
+                                        }) : (
+                                          <span style={{ fontSize: '0.75rem', color: 'var(--text-4)' }}>No File</span>
+                                        )}
                                       </div>
                                     </td>
                                   );
