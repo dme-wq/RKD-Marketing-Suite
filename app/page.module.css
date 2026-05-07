@@ -7,6 +7,24 @@
   background: var(--bg);
 }
 
+@keyframes smoothOpen {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.smoothOpen {
+  animation: smoothOpen 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes softBlink {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 rgba(99, 102, 241, 0); }
+  50% { opacity: 0.85; transform: scale(1.02); box-shadow: 0 0 12px rgba(99, 102, 241, 0.4); }
+}
+
+.blinkPulse {
+  animation: softBlink 2s infinite ease-in-out;
+}
+
 /* ────────────────────────────────────────────
    SIDEBAR  (Dark, fixed)
 ──────────────────────────────────────────── */
@@ -859,25 +877,26 @@
 
 .dataTable {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: auto;
 }
 
-.dataTable thead tr {
-  background: var(--bg);
+.dataTable thead tr th {
+  background: var(--surface-hover);
   border-bottom: 2px solid var(--border);
-}
-
-.dataTable th {
-  padding: 0.875rem 1.125rem;
+  padding: 1rem 1.125rem;
   text-align: center;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  color: var(--text-2);
+  text-transform: capitalize;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
+
+.dataTable thead tr th:first-child { border-top-left-radius: var(--radius-lg); }
+.dataTable thead tr th:last-child { border-top-right-radius: var(--radius-lg); }
 
 .dataTable td {
   padding: 0.8rem 1.125rem;
@@ -893,18 +912,24 @@
 .dataTable tbody tr.active { background: var(--primary-light); }
 
 .cellInput {
-  border: none;
-  background: #fffde7;
+  border: 1px solid transparent;
+  background: var(--surface-hover);
   font-size: 0.875rem;
   color: var(--text-1);
   outline: none;
   width: 100%;
-  padding: 0.4rem 0.6rem;
-  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
   font-weight: 500;
-  transition: all 0.15s;
-  border-left: 2.5px solid #f59e0b;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: center;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.cellInput:hover {
+  background: white;
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .cellInput:focus {
@@ -923,12 +948,12 @@
 
 /* Yellow cell — entire td highlight for editable cells */
 .editableTd {
-  background: #fffde7 !important;
-  padding: 0 !important;
-  border-bottom: 1px solid #fde68a !important;
+  background: white !important;
+  padding: 0.4rem !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
 }
 
-.editableTd:hover { background: #fef9c3 !important; }
+.editableTd:hover { background: var(--surface-hover) !important; }
 
 .readonlyTd {
   background: #374151 !important;
@@ -938,17 +963,15 @@
 }
 
 .editableTd .cellInput {
-  border-radius: 0;
-  border-left: none;
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
   padding: 0.8rem 1.125rem;
-  border-left: 3px solid #f59e0b;
 }
 
 .editableTd .cellInput:focus {
-  background: #fff9e6;
-  border: none;
-  border-left: 3px solid var(--primary);
-  box-shadow: inset 0 0 0 2px rgba(99,102,241,0.15);
+  background: white;
+  border: 1.5px solid var(--primary);
+  box-shadow: var(--primary-glow);
   padding: 0.8rem 1.125rem;
 }
 

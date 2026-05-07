@@ -48,7 +48,7 @@
 
 html, body {
   height: 100%;
-  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-family: 'Poppins', sans-serif;
   background-color: var(--bg);
   color: var(--text-1);
   line-height: 1.5;

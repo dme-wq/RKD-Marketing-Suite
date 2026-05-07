@@ -7,6 +7,7 @@ import FilterBar from "./FilterBar";
 type TabInfo    = { tabName: string; columns: string[] };
 type ModalType  = "addTab" | "deleteRow" | null;
 type ViewType   = "entry" | "edit" | "sent";
+interface EntryRow { data: Record<string, any>; sendWa: boolean; customMsg?: string; }
 
 const STATUS_SENT = "WhatsApp Sent";
 const POLL_INTERVAL_MS = 30_000; // Realtime sync: poll Google Sheet every 30s
@@ -16,7 +17,7 @@ export default function Home() {
   const [activeTab, setActiveTab]       = useState("");
   const [columns, setColumns]           = useState<string[]>([]);
   const [existingRows, setExistingRows] = useState<any[]>([]);
-  const [newRows, setNewRows]           = useState<any[]>([{}]);
+  const [newRows, setNewRows]           = useState<EntryRow[]>([{ data: {}, sendWa: false }]);
   const [view, setView]                 = useState<ViewType>("entry");
   const [sidebarOpen, setSidebarOpen]   = useState(false); // Sidebar hidden by default
 
@@ -40,6 +41,10 @@ export default function Home() {
   const [modalInput, setModalInput]     = useState("");
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
 
+  // Custom WhatsApp Message Modal
+  const [waEditIndex, setWaEditIndex] = useState<number | null>(null);
+  const [waEditMsg, setWaEditMsg]     = useState("");
+
   // Toast
   const [toast, setToast] = useState<{ msg: string; type: "success" | "danger" | "info" } | null>(null);
 
@@ -48,6 +53,7 @@ export default function Home() {
   const modalInputRef  = useRef<HTMLInputElement>(null);
   const importFileRef  = useRef<HTMLInputElement>(null);
   const pollTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const originalCellValRef = useRef<string>("");
 
   // Import state
   const [importModal, setImportModal]         = useState(false);
@@ -147,19 +153,24 @@ export default function Home() {
   const handleTabChange = (tabName: string) => {
     setActiveTab(tabName);
     const t = tabs.find(x => x.tabName === tabName);
-    if (t) { setColumns(t.columns); setNewRows([{}]); setSelectedRows(new Set()); }
+    if (t) { setColumns(t.columns); setNewRows([{ data: {}, sendWa: false }]); setSelectedRows(new Set()); }
   };
 
   const handleCellChange = (ri: number, col: string, val: string) => {
+    let finalVal = val;
+    const lowerCol = col.toLowerCase();
+    if (lowerCol.includes("mobile") || lowerCol.includes("phone") || lowerCol.includes("number")) {
+       finalVal = val.replace(/^0+/, ""); // Remove leading zeroes
+    }
     const d = [...newRows];
-    d[ri] = { ...d[ri], [col]: val };
+    d[ri].data = { ...d[ri].data, [col]: finalVal };
     setNewRows(d);
   };
 
   const statusCol   = columns.find(c => c.toLowerCase() === "status");
   const STATUS_SENT = "WhatsApp Sent";
   const sentRows    = existingRows.filter(r => statusCol && r[statusCol] === STATUS_SENT);
-  const editRows    = existingRows; // Edit view shows ALL rows
+  const editRows    = existingRows.filter(r => !statusCol || r[statusCol] !== STATUS_SENT); // Edit view shows non-sent rows
 
   // ── Filter columns available for dropdowns (non-auto, non-upload) ──────────
   const filterableCols = columns.filter(c => {
@@ -194,7 +205,7 @@ export default function Home() {
   // Columns visible in the Entry form (hide auto-managed ones)
   const autoManagedCols = (col: string) => {
     const cl = col.toLowerCase();
-    return cl.includes("timestamp") || cl.includes("time") || cl === "status" || cl.includes("upload file") || cl.includes("mediaurls");
+    return cl.includes("timestamp") || cl.includes("time") || cl === "status" || cl.includes("upload file") || cl.includes("mediaurls") || cl.includes("link") || cl.includes("url");
   };
   const entryColumns = columns.filter(col => !autoManagedCols(col));
 
@@ -228,8 +239,13 @@ export default function Home() {
   };
 
   const handleArchiveCellEdit = (globalIdx: number, col: string, val: string) => {
+    let finalVal = val;
+    const lowerCol = col.toLowerCase();
+    if (lowerCol.includes("mobile") || lowerCol.includes("phone") || lowerCol.includes("number")) {
+       finalVal = val.replace(/^0+/, ""); // Remove leading zeroes
+    }
     const d = [...existingRows];
-    d[globalIdx] = { ...d[globalIdx], [col]: val };
+    d[globalIdx] = { ...d[globalIdx], [col]: finalVal };
     setExistingRows(d);
   };
 
@@ -402,6 +418,50 @@ export default function Home() {
     setLoading(false);
   };
 
+  const handleRowAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>, sheetRowIndex: number, colName: string, globalIdx: number) => {
+    const files = e.target.files;
+    if (!files || !files.length) return;
+    
+    showToast(`Uploading ${files.length} file(s)...`, "info");
+    
+    let uploadedParts: string[] = [];
+    
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fd = new FormData();
+        fd.append("file", file);
+        
+        const res = await fetch("/api/drive", { method: "POST", body: fd });
+        const data = await res.json();
+        
+        if (data.success) {
+          const url = data.downloadLink || data.link;
+          uploadedParts.push(`${file.name}::${url}`);
+        } else {
+          showToast(`Upload Failed for ${file.name}: ${data.error || "Unknown error"}`, "danger");
+        }
+      }
+      
+      if (uploadedParts.length > 0) {
+        // Fetch existing value if they want to append, but user said "upload multiple files... like in New Entry"
+        // Let's replace the current cell with the new files entirely.
+        const newValue = uploadedParts.join(", ");
+        
+        // Update state
+        handleArchiveCellEdit(globalIdx, colName, newValue);
+        // Update Sheet
+        await updateArchiveCell(sheetRowIndex, colName, newValue);
+        
+        showToast(`Successfully saved ${uploadedParts.length} attachment(s)!`, "success");
+      }
+    } catch (err: any) {
+      showToast(`Upload exception: ${err.message}`, "danger");
+    } finally {
+      e.target.value = ""; // Reset input so same file can be selected again
+    }
+  };
+
   const getIST = () => new Date().toLocaleString("en-IN", {
     timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit",
     year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
@@ -416,9 +476,50 @@ export default function Home() {
     setTimeout(() => el.setSelectionRange(s2 + tag.length + 5, s2 + tag.length + 5), 0);
   };
 
+  const openEditMessageModal = (index: number) => {
+    setWaEditIndex(index);
+    const row = newRows[index];
+    if (row.customMsg !== undefined) {
+      setWaEditMsg(row.customMsg);
+    } else {
+      let baseMsg = whatsappTemplate;
+      columns.forEach(c => {
+        let val = row.data[c] || "";
+        baseMsg = baseMsg.replace(new RegExp(`{{${c}}}`, "g"), val);
+      });
+      if (mediaUrls[0]?.url) baseMsg = baseMsg.replace(/{{Link}}/g, mediaUrls[0].url);
+      setWaEditMsg(baseMsg);
+    }
+  };
+
+  const saveWaEditMsg = () => {
+    if (waEditIndex !== null) {
+      const updated = [...newRows];
+      updated[waEditIndex].customMsg = waEditMsg;
+      setNewRows(updated);
+      setWaEditIndex(null);
+      showToast("Custom message saved for this contact", "success");
+    }
+  };
+
+  const isMandatoryCol = (col: string) => {
+    const cl = col.toLowerCase();
+    return cl.includes("first name") || cl.includes("mobile") || cl.includes("phone") || cl.includes("company");
+  };
+
   const submitData = async () => {
-    if (!newRows.some(r => Object.values(r).some(v => v))) {
+    if (!newRows.some(r => Object.values(r.data).some(v => v))) {
       showToast("Please fill at least one row completely", "danger"); return;
+    }
+
+    // ─── Mandatory Fields Checker ──────────────────────────────────────────────
+    for (let ri = 0; ri < newRows.length; ri++) {
+      const rowData = newRows[ri].data;
+      const missing = entryColumns.filter(c => isMandatoryCol(c) && !rowData[c]?.toString().trim());
+      if (missing.length > 0) {
+        showToast(`Row ${ri + 1}: ${missing.join(", ")} are mandatory!`, "danger");
+        return;
+      }
     }
 
     // ─── Duplicate Checker for Current Tab ─────────────────────────────────────
@@ -426,7 +527,7 @@ export default function Home() {
     const existingMobiles = existingRows.map(r => normalize(r[mobileColName]));
     
     for (const row of newRows) {
-      const newMob = normalize(row[mobileColName]);
+      const newMob = normalize(row.data[mobileColName]);
       if (newMob && existingMobiles.includes(newMob)) {
         showToast(`🚫 Duplicate found: Number "${newMob}" already exists in ${activeTab}!`, "danger");
         return;
@@ -441,10 +542,10 @@ export default function Home() {
 
       const rows = newRows.map(row => columns.map((col, i) => {
         if (i === 0) return getIST();
-        if (col === mobileColName && row[col])
-          return `'${countryCode}${row[col].toString().replace(/\s/g, "")}`;
+        if (col === mobileColName && row.data[col])
+          return `'${countryCode}${row.data[col].toString().replace(/\s/g, "")}`;
         if (col === uploadLinkColName) return uploadLink;
-        return row[col] || "";
+        return row.data[col] || "";
       }));
 
       const res  = await fetch("/api/sheets", {
@@ -455,25 +556,27 @@ export default function Home() {
       if (!data.success) throw new Error(data.error);
 
       // ✅ COMBINED FLOW: Sheet saved — now send WhatsApp immediately if files are attached
-      // ✅ COMBINED FLOW: Sheet saved — now send WhatsApp immediately
-      showToast(`✅ Saved! Sending WhatsApp to ${newRows.length} contact(s)…`, "info");
+      showToast(`✅ Saved! Sending WhatsApp…`, "info");
       let waSent = 0;
       const sentRowPhones: string[] = [];
       for (const row of newRows) {
-        const rawPhone = row[mobileColName]?.toString().replace(/\s/g, "");
+        if (!row.sendWa) continue; // Skip if user unchecked WhatsApp
+
+        const rawPhone = row.data[mobileColName]?.toString().replace(/\s/g, "");
         if (!rawPhone) continue;
         const phone = `${countryCode}${rawPhone}`;
 
         // Personalise message
-        let baseMsg = whatsappTemplate;
-        columns.forEach(c => {
-          let val = row[c] || "";
-          baseMsg = baseMsg.replace(new RegExp(`{{${c}}}`, "g"), val);
-        });
+        let baseMsg = row.customMsg !== undefined ? row.customMsg : whatsappTemplate;
+        if (row.customMsg === undefined) {
+          columns.forEach(c => {
+            let val = row.data[c] || "";
+            baseMsg = baseMsg.replace(new RegExp(`{{${c}}}`, "g"), val);
+          });
+          if (mediaUrls[0]?.url) baseMsg = baseMsg.replace(/{{Link}}/g, mediaUrls[0].url);
+        }
 
         if (mediaUrls.length > 0) {
-          if (mediaUrls[0]?.url) baseMsg = baseMsg.replace(/{{Link}}/g, mediaUrls[0].url);
-
           for (let mi = 0; mi < mediaUrls.length; mi++) {
             const m = mediaUrls[mi];
             const mediaPayload = m.base64 || toDirectLink(m.url, m.name);
@@ -515,7 +618,7 @@ export default function Home() {
 
       showToast(`✅ Saved & WhatsApp sent to ${waSent} contact(s)!`, "success");
 
-      setNewRows([{}]);
+      setNewRows([{ data: {}, sendWa: false }]);
       setMediaUrls([]);  // ✅ Clear uploaded files after save
       // ✅ REALTIME REFRESH: Immediately update the table after save
       await fetchRows(activeTab);
@@ -745,7 +848,7 @@ export default function Home() {
       </aside>
 
       {/* MAIN AREA */}
-      <div className={`${s.mainArea} ${sidebarOpen ? "" : s.mainAreaFull}`}>
+      <div className={`${s.mainArea} ${sidebarOpen ? "" : s.mainAreaFull} ${s.smoothOpen}`}>
         {/* TOP BAR */}
         <header className={s.topBar}>
           <div className={s.topBarLeft}>
@@ -1013,7 +1116,12 @@ export default function Home() {
                   <table className={s.dataTable}>
                     <thead>
                       <tr>
-                        {entryColumns.map(c => <th key={c}>{c}</th>)}
+                        {entryColumns.map(c => (
+                          <th key={c}>
+                            {c} {isMandatoryCol(c) && <span style={{color: 'var(--danger)', marginLeft: '2px'}}>*</span>}
+                          </th>
+                        ))}
+                        <th>WhatsApp Control</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -1025,17 +1133,40 @@ export default function Home() {
                               <input
                                 className={s.cellInput}
                                 placeholder={`Enter ${col}`}
-                                value={row[col] || ""}
+                                value={row.data[col] || ""}
                                 onChange={e => handleCellChange(ri, col, e.target.value)}
                               />
                             </td>
                           ))}
-                          <td>
+                          <td className={s.editableTd} style={{ width: "260px" }}>
+                            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', alignItems: 'center', height: '100%', padding: '0 1rem' }}>
+                              {!row.sendWa && <span className={s.blinkPulse} style={{ fontSize: '0.65rem', color: 'var(--primary)', fontWeight: 700, whiteSpace: 'nowrap' }}>👉 Click to send instantly!</span>}
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, color: row.sendWa ? 'var(--success)' : 'var(--text-4)', transition: 'all 0.2s' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={row.sendWa} 
+                                  onChange={(e) => {
+                                    const updated = [...newRows];
+                                    updated[ri].sendWa = e.target.checked;
+                                    setNewRows(updated);
+                                  }} 
+                                  style={{ accentColor: 'var(--success)', transform: 'scale(1.2)', cursor: 'pointer' }} 
+                                />
+                                {row.sendWa ? "Send WhatsApp" : "Save Only"}
+                              </label>
+                              {row.sendWa && (
+                                <button className={s.iconBtn} onClick={() => openEditMessageModal(ri)} title="Edit Message for this contact" style={{ color: row.customMsg ? 'var(--primary)' : 'var(--text-3)' }}>
+                                  <i className="fa-solid fa-pen-to-square" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className={s.editableTd} style={{ width: "50px" }}>
                             <button
                               className={s.iconBtn}
                               onClick={() => setNewRows(newRows.filter((_, i) => i !== ri))}
                             >
-                              <i className="fa-solid fa-trash-can" style={{ color: "#d1d5db" }} />
+                              <i className="fa-solid fa-trash-can" style={{ color: "var(--text-4)" }} />
                             </button>
                           </td>
                         </tr>
@@ -1046,7 +1177,7 @@ export default function Home() {
                 <div className={s.tableFooter} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <button
                     className={`${s.btn} ${s.btnGhost} ${s.btnSm}`}
-                    onClick={() => setNewRows([...newRows, {}])}
+                    onClick={() => setNewRows([...newRows, { data: {}, sendWa: false }])}
                   >
                     <i className="fa-solid fa-plus" /> Add Another Row
                   </button>
@@ -1062,19 +1193,44 @@ export default function Home() {
             )}
 
             {/* EDIT RECORDS VIEW — All rows editable */}
-            {view === "edit" && (
+            {view === "edit" && (() => {
+              const editColumns = columns.filter(c => c.toLowerCase() !== "links");
+              const allFilteredIndices = filteredEditRows.map(r => existingRows.indexOf(r));
+              const allSelected = allFilteredIndices.length > 0 && allFilteredIndices.every(idx => selectedRows.has(idx));
+              const toggleAll = () => {
+                if (allSelected) {
+                  const s = new Set(selectedRows);
+                  allFilteredIndices.forEach(idx => s.delete(idx));
+                  setSelectedRows(s);
+                } else {
+                  const s = new Set(selectedRows);
+                  allFilteredIndices.forEach(idx => s.add(idx));
+                  setSelectedRows(s);
+                }
+              };
+
+              return (
               <>
-                {/* ── New Dependent Searchable Filter Bar ── */}
-                {editRows.length > 0 && (
-                  <FilterBar
-                    allRows={editRows}
-                    cols={filterableCols.slice(0, 5)}
-                    filters={editFilters}
-                    onChange={setEditFilters}
-                    resultCount={filteredEditRows.length}
-                    accent="purple"
-                  />
-                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <div style={{ flex: 1 }}>
+                    {/* ── New Dependent Searchable Filter Bar ── */}
+                    {editRows.length > 0 && (
+                      <FilterBar
+                        allRows={editRows}
+                        cols={filterableCols.slice(0, 5)}
+                        filters={editFilters}
+                        onChange={setEditFilters}
+                        resultCount={filteredEditRows.length}
+                        accent="purple"
+                      />
+                    )}
+                  </div>
+                  {selectedRows.size > 0 && (
+                    <button className={`${s.btn} ${s.btnPrimary}`} onClick={handleSendWhatsApp} style={{ marginLeft: '1rem', whiteSpace: 'nowrap' }}>
+                      <i className="fa-brands fa-whatsapp" /> Send WhatsApp to {selectedRows.size} Selected
+                    </button>
+                  )}
+                </div>
 
                 {loading ? (
                   <div className={s.emptyState}>
@@ -1093,7 +1249,16 @@ export default function Home() {
                       <table className={s.dataTable}>
                         <thead>
                           <tr>
-                            {columns.map(c => <th key={c}>{c}</th>)}
+                            {editColumns.map(c => <th key={c}>{c}</th>)}
+                            <th style={{ width: "120px", textAlign: "center" }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>Select for WhatsApp</span>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.7rem' }}>
+                                  <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ cursor: 'pointer', transform: 'scale(1.2)', accentColor: 'var(--primary)' }} />
+                                  Select All
+                                </label>
+                              </div>
+                            </th>
                             <th style={{ width: "60px" }}></th>
                           </tr>
                         </thead>
@@ -1103,7 +1268,7 @@ export default function Home() {
                             const isSent = statusCol && row[statusCol] === STATUS_SENT;
                             return (
                               <tr key={pi} style={isSent ? { background: "rgba(16,185,129,0.05)" } : {}}>
-                                {columns.map(c => {
+                                {editColumns.map(c => {
                                   const val = String(row[c] || "");
                                   const isUploadLink = /upload.?file/i.test(c);
                                   const isGeneralLink = /links/i.test(c) || /url/i.test(c);
@@ -1121,21 +1286,64 @@ export default function Home() {
                                     );
                                   }
 
-                                  if (isUploadLink && val) {
-                                    const rawParts = val.split(",").map(l => l.trim()).filter(Boolean);
+                                  if (isUploadLink) {
+                                    const rawParts = val ? val.split(",").map(l => l.trim()).filter(Boolean) : [];
                                     return (
                                       <td key={c}>
-                                        <div style={{ display: "flex", gap: "0.25rem", justifyContent: "center" }}>
-                                          {rawParts.map((raw, i) => {
-                                            let fileName = "Attachment";
-                                            let fileUrl  = raw;
-                                            if (raw.includes("::")) { [fileName, fileUrl] = raw.split("::"); }
-                                            return (
-                                              <a key={i} href={fileUrl} target="_blank" rel="noreferrer" title={fileName} className={s.iconBtn}>
-                                                <i className="fa-solid fa-paperclip" style={{ color: "var(--primary)" }} />
-                                              </a>
-                                            );
-                                          })}
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "center" }}>
+                                          <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "0.4rem", justifyContent: "center", maxWidth: "160px" }}>
+                                            {rawParts.length > 0 ? rawParts.map((raw, i) => {
+                                              let fileName = "Attachment";
+                                              let fileUrl  = raw;
+                                              if (raw.includes("::")) { [fileName, fileUrl] = raw.split("::"); }
+                                              
+                                              const driveMatch = fileUrl.match(/[-\w]{25,}/);
+                                              const driveId = driveMatch ? driveMatch[0] : null;
+                                              
+                                              const extMatch = fileName.match(/\.([a-z0-9]+)$/i);
+                                              const ext = extMatch ? extMatch[1].toLowerCase() : "";
+                                              const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);
+                                              const isPdf = ext === "pdf";
+                                              const isPpt = ["ppt", "pptx"].includes(ext);
+                                              const isExcel = ["xls", "xlsx", "csv"].includes(ext);
+                                              const isWord = ["doc", "docx"].includes(ext);
+
+                                              const renderIcon = () => {
+                                                if (isPdf) return <i className="fa-solid fa-file-pdf" style={{ fontSize: '1.2rem', color: '#ef4444' }} />;
+                                                if (isPpt) return <i className="fa-solid fa-file-powerpoint" style={{ fontSize: '1.2rem', color: '#f97316' }} />;
+                                                if (isExcel) return <i className="fa-solid fa-file-excel" style={{ fontSize: '1.2rem', color: '#22c55e' }} />;
+                                                if (isWord) return <i className="fa-solid fa-file-word" style={{ fontSize: '1.2rem', color: '#3b82f6' }} />;
+                                                return <i className="fa-solid fa-file" style={{ fontSize: '1.2rem', color: 'var(--primary)' }} />;
+                                              };
+
+                                              return (
+                                                <a key={i} href={fileUrl} target="_blank" rel="noreferrer" title={fileName} style={{ display: 'block', textDecoration: 'none' }}>
+                                                  {isImage && driveId ? (
+                                                    <div className={s.blinkPulse}>
+                                                      <img src={`https://drive.google.com/thumbnail?id=${driveId}&sz=w100`} alt={fileName} style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border-light)' }} onError={(e) => { e.currentTarget.style.display = 'none'; if (e.currentTarget.nextElementSibling) (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex'; }} />
+                                                      <div style={{ display: 'none', width: '40px', height: '40px', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-light)' }}>
+                                                        <i className="fa-solid fa-image" style={{ fontSize: '1rem', color: 'var(--primary)' }} />
+                                                      </div>
+                                                    </div>
+                                                  ) : (
+                                                    <div className={s.blinkPulse} style={{ width: '40px', height: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-light)', gap: '0.1rem' }}>
+                                                      {renderIcon()}
+                                                      <span style={{ fontSize: '0.45rem', color: 'var(--text-3)', maxWidth: '35px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '0.1rem', fontWeight: 600 }}>{ext ? ext.toUpperCase() : "FILE"}</span>
+                                                    </div>
+                                                  )}
+                                                </a>
+                                              );
+                                            }) : (
+                                              <span style={{ fontSize: '0.75rem', color: 'var(--text-4)' }}>No File</span>
+                                            )}
+                                          </div>
+                                          
+                                          <div style={{ position: "relative" }}>
+                                            <label style={{ cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', padding: '0.3rem 0.6rem', border: '1px solid var(--primary)', borderRadius: '4px', transition: 'all 0.2s', background: 'var(--bg-body)', display: 'flex', alignItems: 'center' }}>
+                                              <i className="fa-solid fa-upload" style={{ marginRight: '0.3rem' }} /> Change/Add
+                                              <input type="file" multiple hidden onChange={(e) => handleRowAttachmentUpload(e, row._index, c, globalIdx)} />
+                                            </label>
+                                          </div>
                                         </div>
                                       </td>
                                     );
@@ -1158,7 +1366,13 @@ export default function Home() {
                                           className={s.cellInput}
                                           value={val}
                                           onChange={e => handleArchiveCellEdit(globalIdx, c, e.target.value)}
-                                          onBlur={() => updateArchiveCell(row._index, c, val)}
+                                          onFocus={() => { originalCellValRef.current = val; }}
+                                          onBlur={() => {
+                                            if (val !== originalCellValRef.current) {
+                                              updateArchiveCell(row._index, c, val);
+                                              originalCellValRef.current = val;
+                                            }
+                                          }}
                                         />
                                       </td>
                                     );
@@ -1166,6 +1380,9 @@ export default function Home() {
 
                                   return <td key={c} className={s.readonlyTd}>{val}</td>;
                                 })}
+                                <td style={{ textAlign: "center", borderLeft: '1px solid var(--border-light)' }}>
+                                  <input type="checkbox" checked={selectedRows.has(globalIdx)} onChange={() => toggle(globalIdx)} style={{ cursor: 'pointer', transform: 'scale(1.5)', accentColor: 'var(--primary)' }} />
+                                </td>
                                 <td>
                                   <button
                                     className={s.iconBtn}
@@ -1190,7 +1407,8 @@ export default function Home() {
                   </>
                 )}
               </>
-            )}
+              );
+            })()}
 
             {/* SENT VIEW */}
             {view === "sent" && (
@@ -1442,6 +1660,37 @@ export default function Home() {
                   <i className="fa-solid fa-trash-can" /> Delete Record
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {waEditIndex !== null && (
+        <div className={s.modalOverlay} onClick={() => setWaEditIndex(null)}>
+          <div className={s.modal} onClick={e => e.stopPropagation()}>
+            <div className={s.modalHeader}>
+              <h3><i className="fa-brands fa-whatsapp" style={{color:"#25d366"}}/> Custom WhatsApp Message</h3>
+              <button className={s.iconBtn} onClick={() => setWaEditIndex(null)}><i className="fa-solid fa-xmark" /></button>
+            </div>
+            <div className={s.modalBody}>
+              <textarea
+                className={s.textarea}
+                value={waEditMsg}
+                onChange={e => setWaEditMsg(e.target.value)}
+                style={{ height: '220px' }}
+                placeholder="Type a custom message for this contact..."
+              />
+              <p style={{ fontSize: "0.75rem", color: "var(--text-3)", marginTop: "0.8rem", lineHeight: 1.4 }}>
+                <i className="fa-solid fa-circle-info" style={{marginRight:"0.3rem"}}/>
+                This message will be sent specifically to this contact when you click "Save Contact".
+                If you have uploaded files globally, they will still be sent alongside this custom text.
+              </p>
+            </div>
+            <div className={s.modalFooter}>
+              <button className={`${s.btn} ${s.btnGhost}`} onClick={() => setWaEditIndex(null)}>Cancel</button>
+              <button className={`${s.btn} ${s.btnPrimary}`} onClick={saveWaEditMsg}>
+                <i className="fa-solid fa-check" /> Save Custom Message
+              </button>
             </div>
           </div>
         </div>

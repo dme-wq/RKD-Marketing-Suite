@@ -234,7 +234,7 @@ export default function FilterBar({ allRows, cols, filters, onChange, resultCoun
           <i className="fa-solid fa-wand-magic-sparkles" style={{ fontSize: "1.1rem" }} />
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ fontSize: "0.65rem", fontWeight: 900, color: a.badge, textTransform: "uppercase", letterSpacing: "0.2em" }}>Smart</span>
+          <span style={{ fontSize: "0.65rem", fontWeight: 900, color: a.badge, textTransform: "uppercase", letterSpacing: "0.2em" }}>RKD Smart</span>
           <span style={{ fontSize: "1rem", fontWeight: 800, color: "#1e293b", letterSpacing: "-0.02em" }}>Filter HUB</span>
         </div>
       </div>
