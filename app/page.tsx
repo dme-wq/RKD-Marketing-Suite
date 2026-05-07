@@ -84,6 +84,7 @@ export default function Home() {
   }, [activeTab]);
 
   const fetchTabs = async () => {
+    setLoading(true);
     try {
       const res  = await fetch("/api/sheets?action=getTabsAndColumns");
       const data = await res.json();
@@ -95,6 +96,7 @@ export default function Home() {
         }
       }
     } catch { showToast("Failed to load sheet data", "danger"); }
+    finally { setLoading(false); }
   };
 
   const fetchRows = async (tab: string) => {
@@ -453,21 +455,23 @@ export default function Home() {
       if (!data.success) throw new Error(data.error);
 
       // ✅ COMBINED FLOW: Sheet saved — now send WhatsApp immediately if files are attached
-      if (mediaUrls.length > 0) {
-        showToast(`✅ Saved! Sending WhatsApp to ${newRows.length} contact(s)…`, "info");
-        let waSent = 0;
-        const sentRowPhones: string[] = [];
-        for (const row of newRows) {
-          const rawPhone = row[mobileColName]?.toString().replace(/\s/g, "");
-          if (!rawPhone) continue;
-          const phone = `${countryCode}${rawPhone}`;
+      // ✅ COMBINED FLOW: Sheet saved — now send WhatsApp immediately
+      showToast(`✅ Saved! Sending WhatsApp to ${newRows.length} contact(s)…`, "info");
+      let waSent = 0;
+      const sentRowPhones: string[] = [];
+      for (const row of newRows) {
+        const rawPhone = row[mobileColName]?.toString().replace(/\s/g, "");
+        if (!rawPhone) continue;
+        const phone = `${countryCode}${rawPhone}`;
 
-          // Personalise message
-          let baseMsg = whatsappTemplate;
-          columns.forEach(c => {
-            let val = row[c] || "";
-            baseMsg = baseMsg.replace(new RegExp(`{{${c}}}`, "g"), val);
-          });
+        // Personalise message
+        let baseMsg = whatsappTemplate;
+        columns.forEach(c => {
+          let val = row[c] || "";
+          baseMsg = baseMsg.replace(new RegExp(`{{${c}}}`, "g"), val);
+        });
+
+        if (mediaUrls.length > 0) {
           if (mediaUrls[0]?.url) baseMsg = baseMsg.replace(/{{Link}}/g, mediaUrls[0].url);
 
           for (let mi = 0; mi < mediaUrls.length; mi++) {
@@ -484,27 +488,32 @@ export default function Home() {
               }),
             });
           }
-          sentRowPhones.push(phone);
-          waSent++;
-        }
-
-        // ✅ Update Status = 'WhatsApp Sent' for each sent row in Sheet
-        await fetchRows(activeTab); // Get fresh rows with _index
-        const freshRows = await fetch(`/api/sheets?action=getRows&tabName=${activeTab}`)
-          .then(r => r.json()).then(d => d.data || []);
-        for (const sentPhone of sentRowPhones) {
-          const match = freshRows.find((r: any) => {
-            const rp = r[mobileColName]?.toString().replace(/'/g, "").replace(/\D/g, "").slice(-10);
-            const sp = sentPhone.replace(/\D/g, "").slice(-10);
-            return rp === sp;
+        } else {
+          // Send Text Only
+          baseMsg = baseMsg.replace(/{{Link}}/g, "");
+          await fetch("/api/whatsapp", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone, message: baseMsg }),
           });
-          if (match?._index) await updateSheetStatus(match._index, STATUS_SENT);
         }
-
-        showToast(`✅ Saved & WhatsApp sent to ${waSent} contact(s)!`, "success");
-      } else {
-        showToast(`✅ ${newRows.length} record(s) saved!`, "success");
+        sentRowPhones.push(phone);
+        waSent++;
       }
+
+      // ✅ Update Status = 'WhatsApp Sent' for each sent row in Sheet
+      await fetchRows(activeTab); // Get fresh rows with _index
+      const freshRows = await fetch(`/api/sheets?action=getRows&tabName=${activeTab}`)
+        .then(r => r.json()).then(d => d.data || []);
+      for (const sentPhone of sentRowPhones) {
+        const match = freshRows.find((r: any) => {
+          const rp = r[mobileColName]?.toString().replace(/'/g, "").replace(/\D/g, "").slice(-10);
+          const sp = sentPhone.replace(/\D/g, "").slice(-10);
+          return rp === sp;
+        });
+        if (match?._index) await updateSheetStatus(match._index, STATUS_SENT);
+      }
+
+      showToast(`✅ Saved & WhatsApp sent to ${waSent} contact(s)!`, "success");
 
       setNewRows([{}]);
       setMediaUrls([]);  // ✅ Clear uploaded files after save
