@@ -467,6 +467,15 @@ export default function Home() {
     year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
   });
 
+  const formatPhone = (rawPhone: any) => {
+    if (!rawPhone) return "";
+    let p = String(rawPhone).replace(/\D/g, "").replace(/^0+/, "");
+    if (!p) return "";
+    if (p.length === 10) return `${countryCode}${p}`;
+    if (!p.startsWith(countryCode)) return `${countryCode}${p}`;
+    return p;
+  };
+
   const insertTag = (tag: string) => {
     const el = textareaRef.current;
     if (!el) return;
@@ -543,7 +552,7 @@ export default function Home() {
       const rows = newRows.map(row => columns.map((col, i) => {
         if (i === 0) return getIST();
         if (col === mobileColName && row.data[col])
-          return `'${countryCode}${row.data[col].toString().replace(/\s/g, "")}`;
+          return `'${formatPhone(row.data[col])}`;
         if (col === uploadLinkColName) return uploadLink;
         return row.data[col] || "";
       }));
@@ -562,9 +571,8 @@ export default function Home() {
       for (const row of newRows) {
         if (!row.sendWa) continue; // Skip if user unchecked WhatsApp
 
-        const rawPhone = row.data[mobileColName]?.toString().replace(/\s/g, "");
-        if (!rawPhone) continue;
-        const phone = `${countryCode}${rawPhone}`;
+        const phone = formatPhone(row.data[mobileColName]);
+        if (!phone) continue;
 
         // Personalise message
         let baseMsg = row.customMsg !== undefined ? row.customMsg : whatsappTemplate;
@@ -639,7 +647,7 @@ export default function Home() {
     try {
       for (const ri of rowsToSend) {
         const row   = existingRows[ri];
-        const phone = row[mobileColName]?.toString().replace(/'/g, "");
+        const phone = formatPhone(row[mobileColName]?.toString().replace(/'/g, ""));
         if (!phone) continue;
 
         // — Determine which media URLs to use:
@@ -964,8 +972,8 @@ export default function Home() {
           <div className={s.statCard}>
             <div className={`${s.statIconBox} ${s.statIconAmber}`}><i className="fa-solid fa-table-list" /></div>
             <div className={s.statInfo}>
-              <span className={s.statLabel}>Total Records</span>
-              <span className={s.statValue}>{existingRows.length}</span>
+              <span className={s.statLabel}>Pending Records</span>
+              <span className={s.statValue}>{editRows.length}</span>
             </div>
           </div>
           <div className={s.statCard}>
@@ -1090,7 +1098,7 @@ export default function Home() {
             <div className={s.panelHeader}>
               <div className={s.panelTitle}>
                 {view === "entry" && <><i className="fa-solid fa-pen-to-square" /> New Contact Entry</>}
-                {view === "edit"  && <><i className="fa-solid fa-table-list" /> All Records — {existingRows.length} total</>}
+                {view === "edit"  && <><i className="fa-solid fa-table-list" /> Pending Records — {editRows.length} total</>}
                 {view === "sent"  && <><i className="fa-solid fa-circle-check" style={{ color: "#10b981" }} /> WhatsApp Sent — {sentRows.length} contact(s)</>}
               </div>
 
@@ -1100,7 +1108,7 @@ export default function Home() {
                     <i className="fa-solid fa-pen" /> Add Entry
                   </button>
                   <button className={`${s.segItem} ${view === "edit" ? s.segItemActive : ""}`} onClick={() => setView("edit")}>
-                    <i className="fa-solid fa-table-list" /> Edit Records ({existingRows.length})
+                    <i className="fa-solid fa-table-list" /> Edit Records ({editRows.length})
                   </button>
                   <button className={`${s.segItem} ${view === "sent" ? s.segItemActive : ""}`} onClick={() => setView("sent")}>
                     <i className="fa-solid fa-check-double" /> Sent ({sentRows.length})

@@ -26,7 +26,24 @@ export async function POST(request: Request) {
   // If a URL is passed to attach a PDF Media
   if (mediaUrl) {
     payload.type = "media";
-    payload.message = mediaUrl;
+    let finalMediaUrl = mediaUrl;
+
+    if (mediaUrl.startsWith("http")) {
+      try {
+        const fileRes = await fetch(mediaUrl);
+        if (fileRes.ok) {
+          const arrayBuffer = await fileRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          const base64 = buffer.toString("base64");
+          const mime = mime_type || fileRes.headers.get("content-type") || "application/octet-stream";
+          finalMediaUrl = `data:${mime};base64,${base64}`;
+        }
+      } catch (err) {
+        console.error("Failed to fetch media to convert to base64:", err);
+      }
+    }
+
+    payload.message = finalMediaUrl;
     payload.text = message; // Maytapi: text sent along with media inside the 'text' property
     if (filename) payload.filename = filename;
     if (mime_type) payload.mime_type = mime_type;
